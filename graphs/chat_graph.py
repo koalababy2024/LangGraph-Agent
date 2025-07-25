@@ -49,3 +49,4 @@ def get_chat_graph():
         .compile(name="Azure OpenAI Chatbot")
     )
     return graph
+
