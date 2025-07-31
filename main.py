@@ -18,12 +18,12 @@ from dotenv import load_dotenv
 
 load_dotenv()  # ensure .env variables available before other imports
 
-from graphs.chat_graph import get_chat_graph
+from graphs.chat_graph import graph as chat_graph
 import uvicorn
 
 app = FastAPI()
 
-chat_graph = get_chat_graph()
+
 
 @app.get("/ping")
 async def ping():

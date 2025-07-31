@@ -39,14 +39,12 @@ def chatbot(state: "State"):
     response = llm.invoke(state["messages"])
     return {"messages": [response]}
 
-def get_chat_graph():
-    """Return compiled chat graph using Azure OpenAI."""
-    graph = (
-        StateGraph(State)
-        .add_node("chatbot", chatbot)
-        .add_edge("__start__", "chatbot")
-        .add_edge("chatbot", "__end__")
-        .compile(name="Azure OpenAI Chatbot")
-    )
-    return graph
+# Create the chat graph directly as a module-level object
+graph = (
+    StateGraph(State)
+    .add_node("chatbot", chatbot)
+    .add_edge("__start__", "chatbot")
+    .add_edge("chatbot", "__end__")
+    .compile(name="Azure OpenAI Chatbot")
+)
 
