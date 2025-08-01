@@ -15,7 +15,7 @@ from typing import Dict, Any
 from dataclasses import dataclass
 from typing import Annotated, TypedDict, Any, Dict
 
-from langgraph.graph import StateGraph
+from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langchain_openai import AzureChatOpenAI
 
@@ -43,8 +43,8 @@ def chatbot(state: "State"):
 graph = (
     StateGraph(State)
     .add_node("chatbot", chatbot)
-    .add_edge("__start__", "chatbot")
-    .add_edge("chatbot", "__end__")
+    .add_edge(START, "chatbot")
+    .add_edge("chatbot", END)
     .compile(name="Azure OpenAI Chatbot")
 )
 
