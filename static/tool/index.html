@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能工具助手</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 智能工具助手</h1>
+            <p>支持联网搜索的AI助手，可以为您提供实时信息</p>
+        </header>
+
+        <div class="chat-container">
+            <div class="messages" id="messages">
+                <div class="message assistant">
+                    <div class="message-content">
+                        <div class="avatar">🤖</div>
+                        <div class="content">
+                            <p>您好！我是智能工具助手，可以帮您搜索信息、回答问题。请输入您的问题：</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-container">
+                <div class="input-wrapper">
+                    <input type="text" id="messageInput" placeholder="请输入您的问题..." maxlength="500">
+                    <button id="sendButton" class="send-btn">
+                        <span class="send-text">发送</span>
+                        <span class="loading-spinner" style="display: none;">⏳</span>
+                    </button>
+                </div>
+                <div class="input-info">
+                    <span class="char-count">0/500</span>
+                    <span class="tip">💡 支持联网搜索实时信息</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="tool-status" id="toolStatus" style="display: none;">
+            <div class="status-content">
+                <span class="status-icon">🔍</span>
+                <span class="status-text">正在处理...</span>
+            </div>
+        </div>
+
+        <footer>
+            <p>基于 LangGraph 构建的智能助手 | 支持实时联网搜索</p>
+        </footer>
+    </div>
+
+    <!-- Markdown渲染库 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+    <!-- 代码高亮库 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/highlight.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

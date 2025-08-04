@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LangGraph Chat</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Markdown渲染库 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+    <!-- 代码高亮库 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/highlight.min.js"></script>
+</head>
+<body>
+    <div class="chat-container">
+        <div class="chat-header">
+            <h1>🤖 LangGraph Chat</h1>
+            <p>基于 LangGraph 的智能聊天助手</p>
+        </div>
+        
+        <div class="chat-messages" id="chatMessages">
+            <div class="message bot-message">
+                <div class="message-avatar">🤖</div>
+                <div class="message-content">
+                    <p>你好！我是基于 LangGraph 的智能助手，有什么可以帮助你的吗？</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="chat-input-container">
+            <div class="input-wrapper">
+                <input 
+                    type="text" 
+                    id="messageInput" 
+                    placeholder="请输入你的问题..." 
+                    maxlength="500"
+                    autocomplete="off"
+                >
+                <button id="sendButton" type="button">
+                    <span class="send-icon">📤</span>
+                </button>
+            </div>
+            <div class="input-status" id="inputStatus"></div>
+        </div>
+    </div>
+    
+    <!-- Loading indicator -->
+    <div class="loading-indicator" id="loadingIndicator">
+        <div class="typing-dots">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </div>
+    
+    <script src="chat.js"></script>
+</body>
+</html>
