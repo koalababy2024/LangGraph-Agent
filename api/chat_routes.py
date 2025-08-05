@@ -55,7 +55,7 @@ async def chat_endpoint(message: str = Query(..., description="User input messag
 @router.get("/stream")
 async def chat_stream_endpoint(message: str = Query(..., description="User input message")):
     """
-    Streaming chat endpoint.
+    Streaming chat endpoint using official LangGraph streaming.
     
     Query parameter:
     - message: user input text
@@ -69,9 +69,12 @@ async def chat_stream_endpoint(message: str = Query(..., description="User input
             logger.info(f"开始流式聊天请求: {message[:50]}...")
             
             # Send start signal
-            start_data = {'type': 'start', 'content': '', 'metadata': {'node': 'system', 'step': 0}}
+            start_data = {
+                'type': 'start', 
+                'content': '', 
+                'metadata': {'node': 'system', 'step': 0}
+            }
             yield f"data: {json.dumps(start_data)}\n\n"
-            logger.info(f"发送开始信号: {start_data}")
             
             # Create initial state with user message
             initial_state = {
@@ -79,60 +82,57 @@ async def chat_stream_endpoint(message: str = Query(..., description="User input
             }
             logger.info(f"创建初始状态，消息数量: {len(initial_state['messages'])}")
             
-            # Stream the chat graph execution
-            step_count = 0
-            logger.info("开始流式执行聊天图")
+            # Use LangGraph's official streaming with stream_mode="messages"
+            logger.info("使用 LangGraph 官方流式输出模式")
             
-            async for event in chat_graph.astream(initial_state):
-                step_count += 1
-                logger.info(f"步骤 {step_count}: 接收到事件 {list(event.keys())}")
-                
-                # Process each node's output
-                for node_name, node_output in event.items():
-                    logger.info(f"处理节点 '{node_name}' 的输出")
+            accumulated_content = ""
+            chunk_count = 0
+            
+            # Stream using LangGraph's official streaming API
+            async for message_chunk, metadata in chat_graph.astream(
+                initial_state, 
+                stream_mode="messages"
+            ):
+                # Check if the message chunk has content
+                if hasattr(message_chunk, 'content') and message_chunk.content:
+                    logger.info(f"获取了LLM消息: {message_chunk.content}")
+                    chunk_count += 1
+                    accumulated_content += message_chunk.content
                     
-                    if "messages" in node_output:
-                        # Get the latest message
-                        latest_message = node_output["messages"][-1]
-                        logger.info(f"获取到最新消息，类型: {latest_message.type}, 长度: {len(latest_message.content) if hasattr(latest_message, 'content') else 0}")
-                        
-                        if hasattr(latest_message, 'content') and latest_message.content:
-                            # For assistant messages, stream the content token by token
-                            if latest_message.type == "ai":
-                                content = latest_message.content
-                                logger.info(f"开始流式发送AI回复，总长度: {len(content)} 字符")
-                                
-                                # Stream content in chunks for typewriter effect
-                                chunk_size = 3
-                                total_chunks = (len(content) + chunk_size - 1) // chunk_size
-                                
-                                for i in range(0, len(content), chunk_size):
-                                    chunk = content[i:i+chunk_size]
-                                    chunk_data = {'type': 'content', 'content': chunk, 'metadata': {'node': node_name, 'step': step_count}}
-                                    yield f"data: {json.dumps(chunk_data)}\n\n"
-                                    
-                                    # 记录每个chunk的详细信息
-                                    chunk_index = i // chunk_size + 1
-                                    logger.info(f"发送内容块 {chunk_index}/{total_chunks}: '{chunk}' (长度: {len(chunk)})")
-                                    
-                                    # Small delay for typewriter effect
-                                    import asyncio
-                                    await asyncio.sleep(0.05)
-                                
-                                logger.info(f"AI回复流式发送完成")
-                            else:
-                                # For other message types, send as metadata
-                                yield f"data: {json.dumps({'type': 'metadata', 'content': latest_message.content, 'metadata': {'node': node_name, 'step': step_count, 'message_type': latest_message.type}})}\n\n"
+                    # Send the streaming token
+                    chunk_data = {
+                        'type': 'content',
+                        'content': message_chunk.content,
+                        'metadata': {
+                            'node': metadata.get('langgraph_node', 'unknown'),
+                            'chunk_number': chunk_count,
+                            'accumulated_length': len(accumulated_content),
+                            'langgraph_metadata': metadata
+                        }
+                    }
+                    yield f"data: {json.dumps(chunk_data)}\n\n"
+                    logger.info(f"发送流式 token {chunk_count}: '{message_chunk.content}' (节点: {metadata.get('langgraph_node', 'unknown')})")
             
             # Send completion signal
-            end_data = {'type': 'end', 'content': '', 'metadata': {'node': 'system', 'step': step_count + 1}}
+            end_data = {
+                'type': 'end',
+                'content': '',
+                'metadata': {
+                    'total_chunks': chunk_count,
+                    'total_length': len(accumulated_content)
+                }
+            }
             yield f"data: {json.dumps(end_data)}\n\n"
-            logger.info(f"流式聊天完成，总步骤数: {step_count + 1}")
+            logger.info(f"流式输出完成，总共 {chunk_count} 个 token，总长度: {len(accumulated_content)} 字符")
             
         except Exception as e:
             # Send error signal
             error_msg = f"处理请求时出现错误: {str(e)}"
-            error_data = {'type': 'error', 'content': error_msg, 'metadata': {'node': 'system', 'error': True}}
+            error_data = {
+                'type': 'error', 
+                'content': error_msg, 
+                'metadata': {'node': 'system', 'error': True}
+            }
             yield f"data: {json.dumps(error_data)}\n\n"
             logger.error(f"流式聊天出错: {str(e)}", exc_info=True)
     

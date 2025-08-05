@@ -4,42 +4,29 @@ class ToolAssistant {
         this.messageInput = document.getElementById('messageInput');
         this.sendButton = document.getElementById('sendButton');
         this.messagesContainer = document.getElementById('messages');
-        this.toolStatus = document.getElementById('toolStatus');
-        this.charCount = document.querySelector('.char-count');
-        
         this.isProcessing = false;
-        this.currentEventSource = null;
-        this.currentContent = '';  // 存储当前流式内容
-        
-        // 初始化 Markdown 渲染
+        this.currentAssistantMessage = null;
+        this.currentContent = '';
+        this.forceNewMessage = false; // Flag to force a new message for the final reply
+
         this.initMarkdown();
-        
         this.init();
     }
-    
+
     initMarkdown() {
-        // 配置Marked渲染器
         if (typeof marked !== 'undefined') {
-            console.log('marked.js 库已加载');
             marked.setOptions({
                 highlight: function(code, lang) {
-                    if (typeof hljs !== 'undefined' && lang && hljs.getLanguage(lang)) {
-                        try {
-                            return hljs.highlight(code, { language: lang }).value;
-                        } catch (err) {}
-                    }
-                    return code;
+                    const language = hljs.getLanguage(lang) ? lang : 'plaintext';
+                    return hljs.highlight(code, { language }).value;
                 },
-                breaks: true,  // 支持换行
-                gfm: true      // GitHub Flavored Markdown
+                breaks: true,
+                gfm: true
             });
-        } else {
-            console.warn('marked.js 库未加载，将使用纯文本显示');
         }
     }
-    
+
     init() {
-        // 绑定事件监听器
         this.sendButton.addEventListener('click', () => this.sendMessage());
         this.messageInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -47,257 +34,255 @@ class ToolAssistant {
                 this.sendMessage();
             }
         });
-        
-        // 字符计数
-        this.messageInput.addEventListener('input', () => {
-            const count = this.messageInput.value.length;
-            this.charCount.textContent = `${count}/500`;
-            
-            if (count > 450) {
-                this.charCount.style.color = '#ff4444';
-            } else {
-                this.charCount.style.color = '#666';
-            }
-        });
-        
-        // 自动聚焦输入框
         this.messageInput.focus();
     }
-    
+
     async sendMessage() {
         const message = this.messageInput.value.trim();
         if (!message || this.isProcessing) return;
-        
-        // 显示用户消息
+
         this.addMessage(message, 'user');
         this.messageInput.value = '';
-        this.charCount.textContent = '0/500';
-        
-        // 设置处理状态
         this.setProcessing(true);
-        
+
         try {
             await this.streamResponse(message);
         } catch (error) {
-            console.error('发送消息失败:', error);
-            this.addMessage('抱歉，发送消息时出现了错误，请稍后重试。', 'assistant');
-        } finally {
+            console.error('Error sending message:', error);
+            this.addMessage('An error occurred. Please try again.', 'assistant');
             this.setProcessing(false);
         }
     }
-    
+
     async streamResponse(message) {
-        // 创建助手消息容器
-        const assistantMessage = this.addMessage('', 'assistant', true);
-        const contentDiv = assistantMessage.querySelector('.content p');
-        
-        // 建立SSE连接
+        this.cleanupEmptyAssistantMessages();
+        this.currentAssistantMessage = null;
+        this.currentContent = '';
+        this.aiResponseContainer = null;
+
         const encodedMessage = encodeURIComponent(message);
         this.currentEventSource = new EventSource(`/tool/stream?message=${encodedMessage}`);
-        
-        let hasContent = false;
-        let toolsUsed = false;
-        
-        this.currentEventSource.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                
-                switch (data.type) {
-                    case 'tool_status':
-                        // 显示工具状态
-                        this.showToolStatus(data.content);
-                        toolsUsed = true;
-                        break;
-                        
-                    case 'tool_call':
-                        // 显示工具调用信息
-                        this.addToolInfo(assistantMessage, data);
-                        break;
-                        
-                    case 'content':
-                        // 流式添加内容
-                        if (!hasContent) {
-                            contentDiv.innerHTML = '';
-                            hasContent = true;
-                            this.currentContent = '';  // 重置内容缓存
-                        }
-                        
-                        // 累积内容并渲染 Markdown
-                        this.currentContent += data.content;
-                        
-                        // 累积内容并使用专门的渲染方法
-                        this.renderMarkdownContent(contentDiv, this.currentContent);
-                        
-                        this.scrollToBottom();
-                        break;
-                        
-                    case 'complete':
-                        // 完成响应
-                        this.hideToolStatus();
-                        this.currentEventSource.close();
-                        this.currentEventSource = null;
-                        
-                        // 如果没有内容，显示默认消息
-                        if (!hasContent) {
-                            contentDiv.innerHTML = '已完成处理，但没有返回内容。';
-                        }
-                        break;
-                        
-                    case 'error':
-                        // 错误处理
-                        this.hideToolStatus();
-                        contentDiv.innerHTML = data.content || '处理请求时出现错误';
-                        this.currentEventSource.close();
-                        this.currentEventSource = null;
-                        break;
-                }
-            } catch (error) {
-                console.error('解析SSE数据失败:', error);
+
+        let contentDiv = null;
+
+        const ensureAssistantMessage = () => {
+            if (!this.currentAssistantMessage) {
+                this.currentAssistantMessage = this.addMessage('', 'assistant', true);
+                contentDiv = this.currentAssistantMessage.querySelector('.content');
             }
         };
-        
-        this.currentEventSource.onerror = (error) => {
-            console.error('SSE连接错误:', error);
-            this.hideToolStatus();
-            
-            if (!hasContent) {
-                contentDiv.innerHTML = '连接服务器时出现错误，请稍后重试。';
+
+        this.currentEventSource.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            console.log('收到SSE事件:', data.type, data);
+
+            switch (data.type) {
+                case 'start':
+                    ensureAssistantMessage();
+                    contentDiv.innerHTML = '<p>正在思考...</p>';
+                    break;
+
+                case 'ai_decision':
+                    console.log('处理AI决策事件:', data);
+                    ensureAssistantMessage();
+                    this.addAIDecisionInfo(this.currentAssistantMessage, data);
+                    break;
+
+                case 'tool_call':
+                case 'tool_result':
+                    console.log('处理工具事件:', data.type, data);
+                    ensureAssistantMessage();
+                    if (data.type === 'tool_call') {
+                        this.addToolCallInfo(this.currentAssistantMessage, data);
+                    } else {
+                        this.addToolResultInfo(this.currentAssistantMessage, data);
+                    }
+                    break;
+
+                case 'content':
+                    ensureAssistantMessage();
+                    
+                    // 如果有AI回复容器（工具执行后），使用该容器
+                    let targetContainer = this.aiResponseContainer;
+                    
+                    // 如果没有AI回复容器，且contentDiv中已有工具信息，创建一个新的回复区域
+                    if (!targetContainer) {
+                        const hasToolInfo = contentDiv.querySelector('.ai-decision-info, .tool-call-info, .tool-result-info');
+                        if (hasToolInfo) {
+                            // 创建 AI 回复区域
+                            const aiResponseSection = document.createElement('div');
+                            aiResponseSection.className = 'ai-response-section';
+                            aiResponseSection.innerHTML = `
+                                <div class="ai-response-header">🤖 AI回复:</div>
+                                <div class="ai-response-content"></div>
+                            `;
+                            contentDiv.appendChild(aiResponseSection);
+                            targetContainer = aiResponseSection.querySelector('.ai-response-content');
+                            this.aiResponseContainer = targetContainer;
+                        } else {
+                            targetContainer = contentDiv;
+                        }
+                    }
+                    
+                    this.currentContent += data.content;
+                    console.log('正在渲染内容到:', targetContainer, '内容:', this.currentContent);
+                    this.renderMarkdownContent(targetContainer, this.currentContent);
+                    break;
+
+                case 'end':
+                    this.currentEventSource.close();
+                    this.setProcessing(false);
+                    this.cleanupEmptyAssistantMessages();
+                    break;
+
+                case 'error':
+                    ensureAssistantMessage();
+                    contentDiv.innerHTML = `<p class="error-message">Error: ${data.content}</p>`;
+                    this.currentEventSource.close();
+                    this.setProcessing(false);
+                    break;
             }
-            
-            if (this.currentEventSource) {
-                this.currentEventSource.close();
-                this.currentEventSource = null;
+            this.scrollToBottom();
+        };
+
+        this.currentEventSource.onerror = (error) => {
+            console.error('SSE Error:', error);
+            if (this.currentEventSource) this.currentEventSource.close();
+            this.setProcessing(false);
+            if (!this.currentAssistantMessage || this.currentContent === ''){
+                 this.addMessage('Connection failed. Please try again.', 'assistant');
             }
         };
     }
-    
+
+    cleanupEmptyAssistantMessages() {
+        const messages = this.messagesContainer.querySelectorAll('.message.assistant');
+        messages.forEach(msg => {
+            const content = msg.querySelector('.content');
+            if (content && content.innerHTML.trim() === '<p>正在思考...</p>') {
+                msg.remove();
+            }
+        });
+    }
+
     addMessage(content, type, isEmpty = false) {
-        const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${type}`;
-        
+        const messageElement = document.createElement('div');
+        messageElement.className = `message ${type}`;
         const avatar = type === 'user' ? '👤' : '🤖';
-        
-        messageDiv.innerHTML = `
+        const contentHtml = isEmpty ? '' : marked.parse(content);
+
+        messageElement.innerHTML = `
             <div class="message-content">
                 <div class="avatar">${avatar}</div>
-                <div class="content">
-                    <p>${isEmpty ? '正在思考...' : content}</p>
-                </div>
+                <div class="content">${contentHtml}</div>
             </div>
         `;
-        
-        this.messagesContainer.appendChild(messageDiv);
-        this.scrollToBottom();
-        
-        return messageDiv;
+        this.messagesContainer.appendChild(messageElement);
+        return messageElement;
     }
-    
-    addToolInfo(messageElement, toolData) {
+
+    addAIDecisionInfo(messageElement, data) {
+        console.log('addAIDecisionInfo被调用:', messageElement, data);
         const contentDiv = messageElement.querySelector('.content');
+        console.log('contentDiv查找结果:', contentDiv);
         
-        // 创建工具信息显示
-        const toolInfoDiv = document.createElement('div');
-        toolInfoDiv.className = 'tool-info';
+        if (!contentDiv) {
+            console.error('contentDiv为空，无法添加AI决策信息');
+            return;
+        }
         
-        const argsText = Object.keys(toolData.args).length > 0 
-            ? JSON.stringify(toolData.args, null, 2) 
-            : '无参数';
-        
-        toolInfoDiv.innerHTML = `
-            <div class="tool-name">🔧 调用工具: ${toolData.name}</div>
-            <div class="tool-args">参数: ${argsText}</div>
+        if (contentDiv.innerHTML.includes('正在思考...')) {
+            contentDiv.innerHTML = '';
+        }
+
+        // 添加AI决定调用工具的提示
+        const decisionDiv = document.createElement('div');
+        decisionDiv.className = 'ai-decision-info';
+        decisionDiv.innerHTML = `
+            <div class="decision-header">${data.content}</div>
         `;
+        console.log('正在添加AI决策元素:', decisionDiv);
+        contentDiv.appendChild(decisionDiv);
+        console.log('AI决策元素已添加，contentDiv内容:', contentDiv.innerHTML);
+    }
+
+    addToolCallInfo(messageElement, toolData) {
+        console.log('addToolCallInfo被调用:', messageElement, toolData);
+        const contentDiv = messageElement.querySelector('.content');
+        console.log('contentDiv查找结果:', contentDiv);
         
-        contentDiv.appendChild(toolInfoDiv);
-        this.scrollToBottom();
+        if (!contentDiv) {
+            console.error('contentDiv为空，无法添加工具调用信息');
+            return;
+        }
+        
+        // 添加工具调用详情
+        const toolCallDiv = document.createElement('div');
+        toolCallDiv.className = 'tool-call-info';
+        const toolName = toolData.tool_name || toolData.name || 'unknown';
+        const args = JSON.stringify(toolData.tool_args || toolData.args || {}, null, 2);
+        toolCallDiv.innerHTML = `
+            <div class="tool-header">🔍 调用工具: <strong>${toolName}</strong></div>
+            <pre><code>${args}</code></pre>
+        `;
+        console.log('正在添加工具调用元素:', toolCallDiv);
+        contentDiv.appendChild(toolCallDiv);
+        console.log('工具调用元素已添加，contentDiv内容:', contentDiv.innerHTML);
     }
-    
-    showToolStatus(message) {
-        const statusText = this.toolStatus.querySelector('.status-text');
-        statusText.textContent = message;
-        this.toolStatus.style.display = 'block';
+
+    addToolResultInfo(messageElement, toolData) {
+        const contentDiv = messageElement.querySelector('.content');
+        const toolResultDiv = document.createElement('div');
+        toolResultDiv.className = 'tool-result-info';
+        toolResultDiv.innerHTML = `
+            <div class="tool-result-header">✅ 工具执行完成</div>
+            <div class="tool-result-content">${toolData.result}</div>
+        `;
+        contentDiv.appendChild(toolResultDiv);
+        
+        // 添加AI回复分隔区域
+        const aiResponseSection = document.createElement('div');
+        aiResponseSection.className = 'ai-response-section';
+        aiResponseSection.innerHTML = `
+            <div class="ai-response-header">🤖 AI回复:</div>
+            <div class="ai-response-content"></div>
+        `;
+        contentDiv.appendChild(aiResponseSection);
+        
+        // 设置标志，准备在同一消息中显示AI回复
+        this.aiResponseContainer = aiResponseSection.querySelector('.ai-response-content');
+        
+        // 重设内容累积，避免重复
+        this.currentContent = '';
     }
-    
-    hideToolStatus() {
-        this.toolStatus.style.display = 'none';
-    }
-    
+
     setProcessing(processing) {
         this.isProcessing = processing;
         this.sendButton.disabled = processing;
         this.messageInput.disabled = processing;
-        
-        const sendText = this.sendButton.querySelector('.send-text');
-        const loadingSpinner = this.sendButton.querySelector('.loading-spinner');
-        
-        if (processing) {
-            sendText.style.display = 'none';
-            loadingSpinner.style.display = 'inline';
-        } else {
-            sendText.style.display = 'inline';
-            loadingSpinner.style.display = 'none';
-        }
+        this.sendButton.querySelector('.send-text').style.display = processing ? 'none' : 'inline';
+        this.sendButton.querySelector('.loading-spinner').style.display = processing ? 'inline' : 'none';
     }
-    
+
     scrollToBottom() {
         this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
     }
-    
+
     renderMarkdownContent(element, content) {
-        try {
-            if (typeof marked !== 'undefined') {
-                // 渲染Markdown内容
-                const htmlContent = marked.parse(content);
-                element.innerHTML = htmlContent;
-                
-                // 高亮代码块（如果hljs可用）
-                if (typeof hljs !== 'undefined') {
-                    element.querySelectorAll('pre code').forEach((block) => {
-                        hljs.highlightElement(block);
-                    });
-                }
-                console.log('Markdown 渲染成功:', content.substring(0, 50) + '...');
-            } else {
-                // 如果Markdown库未加载，使用纯文本但保留换行
-                element.innerHTML = content.replace(/\n/g, '<br>');
-                console.log('使用纯文本显示:', content.substring(0, 50) + '...');
-            }
-        } catch (error) {
-            console.error('Markdown渲染错误:', error);
-            element.innerHTML = content.replace(/\n/g, '<br>');
-        }
+        element.innerHTML = marked.parse(content);
+        element.querySelectorAll('pre code').forEach((block) => {
+            hljs.highlightElement(block);
+        });
     }
-    
-    // 清理资源
+
     cleanup() {
         if (this.currentEventSource) {
             this.currentEventSource.close();
-            this.currentEventSource = null;
         }
     }
 }
 
-// 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', () => {
     const assistant = new ToolAssistant();
-    
-    // 页面卸载时清理资源
-    window.addEventListener('beforeunload', () => {
-        assistant.cleanup();
-    });
-});
-
-// 添加一些实用功能
-document.addEventListener('DOMContentLoaded', () => {
-    // 添加快捷示例按钮（可选）
-    const examples = [
-        '今天北京的天气如何？',
-        '最新的科技新闻有哪些？',
-        '帮我搜索Python编程教程',
-        '最近有什么热门电影？'
-    ];
-    
-    // 可以在这里添加示例按钮的逻辑
-    console.log('智能工具助手已加载完成');
-    console.log('支持的示例问题:', examples);
+    window.addEventListener('beforeunload', () => assistant.cleanup());
 });

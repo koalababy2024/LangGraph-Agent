@@ -2,25 +2,6 @@
 import asyncio
 import warnings
 
-# 禁用相关警告
-warnings.filterwarnings("ignore", category=RuntimeWarning)
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-
-# 简单修复 eager_start 问题
-original_create_task = asyncio.create_task
-def patched_create_task(coro, *, name=None, **kwargs):
-    # 移除 eager_start 参数
-    kwargs.pop('eager_start', None)
-    kwargs.pop('context', None)
-    try:
-        return original_create_task(coro, name=name)
-    except TypeError:
-        # 如果还有问题，使用最基本的方法
-        loop = asyncio.get_running_loop()
-        return loop.create_task(coro)
-
-asyncio.create_task = patched_create_task
-
 import os
 from typing import Annotated
 
@@ -70,7 +51,22 @@ tools = [add_numbers, multiply_numbers, calculate_square, get_current_time]
 llm_with_tools = llm.bind_tools(tools)
 
 def chatbot(state: State):
-    return {"messages": [llm_with_tools.invoke(state["messages"])]}
+    """LangGraph chatbot node with tool calling capability.
+    
+    LangGraph will automatically handle streaming when using stream_mode="messages".
+    The framework will intercept and stream tokens from llm_with_tools.invoke() calls.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    response = llm_with_tools.invoke(state["messages"])
+    logger.info(f"LLM with tools invoke Response: {response.content}")
+    
+    # Log tool calls if present
+    if hasattr(response, 'tool_calls') and response.tool_calls:
+        logger.info(f"Tool calls requested: {[tc.get('name', 'unknown') for tc in response.tool_calls]}")
+    
+    return {"messages": [response]}
 
 graph_builder.add_node("chatbot", chatbot)
 
