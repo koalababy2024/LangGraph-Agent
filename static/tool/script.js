@@ -27,19 +27,49 @@ class ToolAssistant {
     }
 
     init() {
-        this.sendButton.addEventListener('click', () => this.sendMessage());
-        this.messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+        // 确保元素存在后再添加事件监听器
+        if (this.sendButton) {
+            console.log('添加发送按钮点击事件');
+            this.sendButton.addEventListener('click', (e) => {
+                console.log('发送按钮被点击');
                 e.preventDefault();
                 this.sendMessage();
-            }
-        });
-        this.messageInput.focus();
+            });
+        } else {
+            console.error('发送按钮元素未找到');
+        }
+        
+        if (this.messageInput) {
+            this.messageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    console.log('Enter键被按下');
+                    e.preventDefault();
+                    this.sendMessage();
+                }
+            });
+            this.messageInput.focus();
+        } else {
+            console.error('输入框元素未找到');
+        }
     }
 
     async sendMessage() {
+        console.log('sendMessage 被调用');
         const message = this.messageInput.value.trim();
-        if (!message || this.isProcessing) return;
+        
+        // 详细的状态检查和日志
+        console.log('消息内容:', message);
+        console.log('处理状态:', this.isProcessing);
+        
+        if (!message) {
+            console.log('消息为空，返回');
+            return;
+        }
+        
+        if (this.isProcessing) {
+            console.log('正在处理中，返回');
+            return;
+        }
 
         this.addMessage(message, 'user');
         this.messageInput.value = '';
@@ -49,7 +79,9 @@ class ToolAssistant {
             await this.streamResponse(message);
         } catch (error) {
             console.error('Error sending message:', error);
-            this.addMessage('An error occurred. Please try again.', 'assistant');
+            this.addMessage('发生错误，请重试: ' + error.message, 'assistant');
+        } finally {
+            // 确保状态总是被重置
             this.setProcessing(false);
         }
     }
@@ -257,11 +289,23 @@ class ToolAssistant {
     }
 
     setProcessing(processing) {
+        console.log('设置处理状态:', processing);
         this.isProcessing = processing;
-        this.sendButton.disabled = processing;
-        this.messageInput.disabled = processing;
-        this.sendButton.querySelector('.send-text').style.display = processing ? 'none' : 'inline';
-        this.sendButton.querySelector('.loading-spinner').style.display = processing ? 'inline' : 'none';
+        
+        // 安全地更新按钮状态
+        if (this.sendButton) {
+            this.sendButton.disabled = processing;
+            const sendText = this.sendButton.querySelector('.send-text');
+            const spinner = this.sendButton.querySelector('.loading-spinner');
+            
+            if (sendText) sendText.style.display = processing ? 'none' : 'inline';
+            if (spinner) spinner.style.display = processing ? 'inline' : 'none';
+        }
+        
+        // 安全地更新输入框状态
+        if (this.messageInput) {
+            this.messageInput.disabled = processing;
+        }
     }
 
     scrollToBottom() {
@@ -276,9 +320,13 @@ class ToolAssistant {
     }
 
     cleanup() {
+        console.log('清理资源');
         if (this.currentEventSource) {
             this.currentEventSource.close();
+            this.currentEventSource = null;
         }
+        // 重置处理状态
+        this.setProcessing(false);
     }
 }
 
