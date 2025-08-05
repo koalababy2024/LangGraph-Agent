@@ -12,6 +12,8 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
+from langchain_tavily import TavilySearch
+from langchain_community.tools import DuckDuckGoSearchRun
 
 # Import shared LLM instance
 from config import llm
@@ -47,7 +49,53 @@ def get_current_time() -> str:
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     return f"Current time is: {current_time}"
 
-tools = [add_numbers, multiply_numbers, calculate_square, get_current_time]
+# Initialize Tavily search tool
+# tavily_search = TavilySearch(
+#     api_key=os.environ["TAVILY_API_KEY"],
+#     max_results=2
+# )
+
+# Create a Baidu search tool for better China network compatibility
+@tool
+def baidu_search(query: str) -> str:
+    """Search Baidu for current information and web results.
+    Use this when you need to find recent news, current events, or general web information.
+    This search tool works well in China network environment.
+    
+    Args:
+        query: The search query string
+    
+    Returns:
+        Search results as formatted text
+    """
+    try:
+        from baidusearch.baidusearch import search
+        
+        # Use Baidu search with max 5 results
+        results = search(query, num_results=5)
+        
+        if not results:
+            return f"No search results found for: {query}"
+        
+        # Format results
+        formatted_results = []
+        for i, result in enumerate(results, 1):
+            title = result.get('title', 'No title')
+            abstract = result.get('abstract', 'No description')
+            url = result.get('url', 'No URL')
+            
+            formatted_results.append(
+                f"{i}. **{title}**\n"
+                f"   {abstract}\n"
+                f"   URL: {url}\n"
+            )
+        
+        return "\n".join(formatted_results)
+        
+    except Exception as e:
+        return f"Baidu search failed due to: {str(e)}. Please try a different search query or try again later."
+
+tools = [add_numbers, multiply_numbers, calculate_square, get_current_time, baidu_search]
 llm_with_tools = llm.bind_tools(tools)
 
 def chatbot(state: State):

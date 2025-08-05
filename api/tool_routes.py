@@ -148,7 +148,7 @@ async def tool_stream_endpoint(message: str = Query(..., description="User input
                     if node_from_metadata == "tools":
                         # 这是工具调用返回的ToolMessage，这里不返回给前端显示。
                         # 这里和下面工具节点更新update的逻辑是同时发生的。
-                        logger.info(f"获取了LLM消息: {message_chunk.content}")
+                        logger.info(f"获取了LLM消息 - 调用工具返回: {message_chunk.content}")
                         continue
                     if hasattr(message_chunk, 'content') and message_chunk.content:
                         logger.info(f"获取了LLM消息: {message_chunk.content}")
