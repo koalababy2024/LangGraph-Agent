@@ -48,6 +48,27 @@ body {
     font-size: 0.9rem;
 }
 
+/* 聊天控件 */
+.chat-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.thread-info {
+    font-size: 0.8rem;
+    opacity: 0.8;
+    font-family: 'Courier New', monospace;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 4px 8px;
+    border-radius: 12px;
+}
+
+
+
 /* 消息区域 */
 .chat-messages {
     flex: 1;
@@ -209,20 +230,13 @@ body {
     min-height: 16px;
 }
 
-/* 加载指示器 */
-.loading-indicator {
-    display: none;
-    padding: 10px 20px;
-}
-
-.loading-indicator.show {
-    display: block;
-}
-
+/* 消息内加载动画 */
 .typing-dots {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 4px;
+    padding: 8px 0;
+    justify-content: flex-start;
 }
 
 .typing-dots span {
@@ -257,7 +271,7 @@ body {
     position: relative;
 }
 
-.streaming-text::after {
+.streaming-text.show-cursor::after {
     content: '|';
     animation: blink 1s infinite;
     color: #4facfe;
@@ -393,6 +407,43 @@ body {
     padding: 0;
     border-radius: 0;
     font-size: inherit;
+}
+
+/* 通知消息样式 */
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    color: white;
+    padding: 12px 20px;
+    border-radius: 25px;
+    box-shadow: 0 4px 15px rgba(79, 172, 254, 0.3);
+    font-size: 0.9rem;
+    font-weight: 500;
+    z-index: 1000;
+    animation: slideInRight 0.3s ease-out, fadeOut 0.3s ease-in 2.7s;
+    backdrop-filter: blur(10px);
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes fadeOut {
+    from {
+        opacity: 1;
+    }
+    to {
+        opacity: 0;
+    }
 }
 
 .message-content table {

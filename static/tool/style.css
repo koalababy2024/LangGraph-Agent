@@ -38,6 +38,22 @@ header p {
     opacity: 0.9;
 }
 
+.thread-info-container {
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.thread-info {
+    font-size: 0.8rem;
+    opacity: 0.8;
+    font-family: 'Courier New', monospace;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 4px 8px;
+    border-radius: 12px;
+    display: inline-block;
+}
+
 .chat-container {
     flex: 1;
     background: white;

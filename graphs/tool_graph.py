@@ -12,6 +12,7 @@ from typing_extensions import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
+from langgraph.checkpoint.memory import InMemorySaver
 from langchain_tavily import TavilySearch
 from langchain_community.tools import DuckDuckGoSearchRun
 
@@ -128,4 +129,9 @@ graph_builder.add_conditional_edges(
 # Any time a tool is called, we return to the chatbot to decide the next step
 graph_builder.add_edge("tools", "chatbot")
 graph_builder.add_edge(START, "chatbot")
-graph = graph_builder.compile()
+
+# Initialize checkpoint/memory for conversation persistence
+memory = InMemorySaver()
+
+# Compile the graph with checkpoint
+graph = graph_builder.compile(checkpointer=memory)

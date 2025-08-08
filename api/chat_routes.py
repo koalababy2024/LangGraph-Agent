@@ -16,7 +16,10 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 
 @router.get("/")
-async def chat_endpoint(message: str = Query(..., description="User input message")):
+async def chat_endpoint(
+    message: str = Query(..., description="User input message"),
+    thread_id: str = Query("default", description="Thread ID for conversation memory")
+):
     """
     Blocking chat endpoint.
     
@@ -32,8 +35,11 @@ async def chat_endpoint(message: str = Query(..., description="User input messag
             "messages": [HumanMessage(content=message)]
         }
         
+        # Create config with thread_id for conversation memory
+        config = {"configurable": {"thread_id": thread_id}}
+        
         # Invoke the chat graph and get final result
-        result = await chat_graph.ainvoke(initial_state)
+        result = await chat_graph.ainvoke(initial_state, config)
         
         # Extract the assistant's response
         assistant_message = result["messages"][-1]
@@ -53,7 +59,10 @@ async def chat_endpoint(message: str = Query(..., description="User input messag
 
 
 @router.get("/stream")
-async def chat_stream_endpoint(message: str = Query(..., description="User input message")):
+async def chat_stream_endpoint(
+    message: str = Query(..., description="User input message"),
+    thread_id: str = Query("default", description="Thread ID for conversation memory")
+):
     """
     Streaming chat endpoint using official LangGraph streaming.
     
@@ -88,9 +97,13 @@ async def chat_stream_endpoint(message: str = Query(..., description="User input
             accumulated_content = ""
             chunk_count = 0
             
+            # Create config with thread_id for conversation memory
+            config = {"configurable": {"thread_id": thread_id}}
+            
             # Stream using LangGraph's official streaming API
             async for message_chunk, metadata in chat_graph.astream(
-                initial_state, 
+                initial_state,
+                config,
                 stream_mode="messages"
             ):
                 # Check if the message chunk has content

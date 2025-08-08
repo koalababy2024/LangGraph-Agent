@@ -4,15 +4,46 @@ class ToolAssistant {
         this.messageInput = document.getElementById('messageInput');
         this.sendButton = document.getElementById('sendButton');
         this.messagesContainer = document.getElementById('messages');
+        this.threadInfo = document.getElementById('threadInfo');
         this.isProcessing = false;
         this.currentAssistantMessage = null;
         this.currentContent = '';
         this.forceNewMessage = false; // Flag to force a new message for the final reply
+        
+        // 初始化thread_id用于对话记忆
+        this.threadId = this.initThreadId();
+        this.updateThreadDisplay();
 
         this.initMarkdown();
         this.init();
     }
 
+    /**
+     * 初始化thread_id用于对话记忆
+     * 每次页面加载都生成新的thread_id
+     * @returns {string} thread_id
+     */
+    initThreadId() {
+        // 每次都生成新的thread_id: 时间戳 + 随机字符串
+        const timestamp = Date.now();
+        const randomStr = Math.random().toString(36).substring(2, 8);
+        const threadId = `tool_${timestamp}_${randomStr}`;
+        
+        console.log('生成新的thread_id:', threadId);
+        return threadId;
+    }
+    
+    /**
+     * 更新thread_id显示
+     */
+    updateThreadDisplay() {
+        if (this.threadInfo) {
+            // 只显示thread_id的后8位，避免显示过长
+            const shortThreadId = this.threadId.slice(-8);
+            this.threadInfo.textContent = `会话ID: ...${shortThreadId}`;
+        }
+    }
+    
     initMarkdown() {
         if (typeof marked !== 'undefined') {
             marked.setOptions({
@@ -93,7 +124,7 @@ class ToolAssistant {
         this.aiResponseContainer = null;
 
         const encodedMessage = encodeURIComponent(message);
-        this.currentEventSource = new EventSource(`/tool/stream?message=${encodedMessage}`);
+        this.currentEventSource = new EventSource(`/tool/stream?message=${encodedMessage}&thread_id=${encodeURIComponent(this.threadId)}`);
 
         let contentDiv = null;
 

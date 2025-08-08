@@ -14,6 +14,7 @@ from typing import Annotated, TypedDict
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
+from langgraph.checkpoint.memory import InMemorySaver
 from langchain_openai import AzureChatOpenAI
 
 
@@ -46,15 +47,15 @@ def chatbot(state: State):
     return {"messages": [response]}
 
 
-# Create the chat graph
+# Create the chat graph with checkpoint for memory
 # Note: LangGraph will handle streaming automatically when using stream_mode="messages"
-graph = (
-    StateGraph(State)
-    .add_node("chatbot", chatbot)
-    .add_edge(START, "chatbot")
-    .add_edge("chatbot", END)
-    .compile()
-)
+graph_builder = StateGraph(State)
+graph_builder.add_node("chatbot", chatbot)
+graph_builder.add_edge(START, "chatbot")
+graph_builder.add_edge("chatbot", END)
 
+# Initialize checkpoint/memory for conversation persistence
+memory = InMemorySaver()
 
-
+# Compile the graph with checkpoint
+graph = graph_builder.compile(checkpointer=memory)

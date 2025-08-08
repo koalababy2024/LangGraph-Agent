@@ -9,14 +9,66 @@ class ChatApp {
         this.messageInput = document.getElementById('messageInput');
         this.sendButton = document.getElementById('sendButton');
         this.inputStatus = document.getElementById('inputStatus');
-        this.loadingIndicator = document.getElementById('loadingIndicator');
+        this.threadInfo = document.getElementById('threadInfo');
         
         this.isStreaming = false;
         this.currentBotMessage = null;
         this.currentBotContent = '';  // 用于累积流式内容
         
+        // 初始化thread_id用于对话记忆
+        this.threadId = this.initThreadId();
+        this.updateThreadDisplay();
+        
         this.initMarkdown();
         this.init();
+    }
+    
+    /**
+     * 初始化thread_id用于对话记忆
+     * 每次页面加载都生成新的thread_id
+     * @returns {string} thread_id
+     */
+    initThreadId() {
+        // 每次都生成新的thread_id: 时间戳 + 随机字符串
+        const timestamp = Date.now();
+        const randomStr = Math.random().toString(36).substring(2, 8);
+        const threadId = `chat_${timestamp}_${randomStr}`;
+        
+        console.log('生成新的thread_id:', threadId);
+        return threadId;
+    }
+    
+
+    
+    /**
+     * 更新thread_id显示
+     */
+    updateThreadDisplay() {
+        if (this.threadInfo) {
+            // 只显示thread_id的后8位，避免显示过长
+            const shortThreadId = this.threadId.slice(-8);
+            this.threadInfo.textContent = `会话ID: ...${shortThreadId}`;
+        }
+    }
+    
+    /**
+     * 显示通知消息
+     */
+    showNotification(message) {
+        // 创建通知元素
+        const notification = document.createElement('div');
+        notification.className = 'notification';
+        notification.textContent = message;
+        
+        // 添加到页面
+        document.body.appendChild(notification);
+        
+        // 3秒后自动移除
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.parentNode.removeChild(notification);
+            }
+        }, 3000);
     }
     
     initMarkdown() {
@@ -46,6 +98,8 @@ class ChatApp {
                 this.sendMessage();
             }
         });
+        
+
         
         // 输入框字符计数
         this.messageInput.addEventListener('input', () => this.updateInputStatus());
@@ -109,17 +163,20 @@ class ChatApp {
     async streamChatResponse(message) {
         this.isStreaming = true;
         this.sendButton.disabled = true;
-        this.loadingIndicator.classList.add('show');
         this.currentBotContent = '';  // 重置内容累积器
         
-        // 创建机器人消息容器
+        // 创建机器人消息容器，并显示加载动画
         this.currentBotMessage = this.addMessage('', 'bot');
         const messageText = this.currentBotMessage.querySelector('p');
         messageText.classList.add('streaming-text');
         
+        // 在消息内容中显示加载动画，不显示光标
+        messageText.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+        messageText.classList.remove('show-cursor');
+        
         try {
-            // 构建请求URL
-            const url = `/chat/stream?message=${encodeURIComponent(message)}`;
+            // 构建请求URL，包含thread_id参数
+            const url = `/chat/stream?message=${encodeURIComponent(message)}&thread_id=${encodeURIComponent(this.threadId)}`;
             
             // 创建EventSource连接
             const eventSource = new EventSource(url);
@@ -161,6 +218,10 @@ class ChatApp {
             case 'content':
                 // 内容数据 - 累积并渲染Markdown
                 if (data.content) {
+                    // 第一次接收内容时，清除加载动画并显示光标
+                    if (this.currentBotContent === '') {
+                        messageElement.classList.add('show-cursor');
+                    }
                     this.currentBotContent += data.content;
                     this.renderMarkdownContent(messageElement, this.currentBotContent);
                     this.scrollToBottom();
@@ -201,11 +262,11 @@ class ChatApp {
     finishStreaming() {
         this.isStreaming = false;
         this.sendButton.disabled = false;
-        this.loadingIndicator.classList.remove('show');
         
         if (this.currentBotMessage) {
             const messageText = this.currentBotMessage.querySelector('p');
             messageText.classList.remove('streaming-text');
+            messageText.classList.remove('show-cursor');
             
             // 如果消息为空，显示默认错误信息
             if (!messageText.textContent.trim()) {

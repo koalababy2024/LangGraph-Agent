@@ -16,6 +16,9 @@
         <div class="chat-header">
             <h1>🤖 LangGraph Chat</h1>
             <p>基于 LangGraph 的智能聊天助手</p>
+            <div class="chat-controls">
+                <span class="thread-info" id="threadInfo">会话ID: 加载中...</span>
+            </div>
         </div>
         
         <div class="chat-messages" id="chatMessages">
@@ -41,15 +44,6 @@
                 </button>
             </div>
             <div class="input-status" id="inputStatus"></div>
-        </div>
-    </div>
-    
-    <!-- Loading indicator -->
-    <div class="loading-indicator" id="loadingIndicator">
-        <div class="typing-dots">
-            <span></span>
-            <span></span>
-            <span></span>
         </div>
     </div>
     

@@ -18,7 +18,10 @@ router = APIRouter(prefix="/tool", tags=["tool"])
 
 
 @router.get("/")
-async def tool_endpoint(message: str = Query(..., description="User input message")):
+async def tool_endpoint(
+    message: str = Query(..., description="User input message"),
+    thread_id: str = Query("default", description="Thread ID for conversation memory")
+):
     """
     Blocking tool endpoint.
     
@@ -34,9 +37,12 @@ async def tool_endpoint(message: str = Query(..., description="User input messag
             "messages": [HumanMessage(content=message)]
         }
         
-        logger.info(f"Invoking tool graph for message: '{message}'")
+        # Create config with thread_id for conversation memory
+        config = {"configurable": {"thread_id": thread_id}}
+        
+        logger.info(f"Invoking tool graph for message: '{message}' with thread_id: {thread_id}")
         # Invoke the tool graph and get final result
-        result = await tool_graph.ainvoke(initial_state)
+        result = await tool_graph.ainvoke(initial_state, config)
         logger.info(f"Graph invocation finished. Final state: {result}")
         
         # Extract the assistant's response
@@ -69,7 +75,10 @@ async def tool_endpoint(message: str = Query(..., description="User input messag
 
 
 @router.get("/stream")
-async def tool_stream_endpoint(message: str = Query(..., description="User input message")):
+async def tool_stream_endpoint(
+    message: str = Query(..., description="User input message"),
+    thread_id: str = Query("default", description="Thread ID for conversation memory")
+):
     """
     Streaming tool endpoint using official LangGraph streaming with tool usage display.
     
@@ -106,9 +115,13 @@ async def tool_stream_endpoint(message: str = Query(..., description="User input
             current_node = None
             tool_decision_sent = False  # 标记是否已发送AI决策事件
             
+            # Create config with thread_id for conversation memory
+            config = {"configurable": {"thread_id": thread_id}}
+            
             # Stream using LangGraph's official streaming API with multiple modes
             async for stream_mode, chunk in tool_graph.astream(
-                initial_state, 
+                initial_state,
+                config,
                 stream_mode=["messages", "updates"]
             ):
                 # stream_mode="messages" 和 stream_mode="updates" 发回来的 数据粒度完全不同，因此两种日志看起来会很不一样——这正是官方设计的结果。
