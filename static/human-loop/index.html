@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Human in the Loop 助手</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🤝 Human in the Loop 助手</h1>
+            <p class="subtitle">AI与人工协作的智能助手</p>
+        </header>
+
+        <div class="chat-controls">
+            <div class="thread-info">
+                <span>会话ID: </span>
+                <span id="thread-id" class="thread-id-display">default</span>
+            </div>
+            <button id="reset-button" class="reset-button">新对话</button>
+        </div>
+
+        <div class="chat-container">
+            <div id="chat-messages" class="chat-messages">
+                <div class="welcome-message">
+                    <div class="message-content">
+                        <h3>👋 欢迎使用Human in the Loop助手！</h3>
+                        <p>这个助手结合了AI的智能和人工的专业知识：</p>
+                        <ul>
+                            <li>🤖 AI会尝试回答您的问题</li>
+                            <li>🔍 需要时会搜索最新信息</li>
+                            <li>🤝 遇到复杂问题时会请求人工协助</li>
+                            <li>💡 人工专家会提供专业建议</li>
+                        </ul>
+                        <p>请开始您的对话吧！</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="intervention-panel" id="intervention-panel" style="display: none;">
+            <div class="intervention-content">
+                <h3>🤝 需要人工协助</h3>
+                <div class="intervention-query" id="intervention-query"></div>
+                <div class="intervention-controls">
+                    <textarea id="human-response" placeholder="请输入您的专业建议或回复..."></textarea>
+                    <div class="intervention-buttons">
+                        <button id="submit-response" class="submit-button">提交回复</button>
+                        <button id="cancel-intervention" class="cancel-button">取消</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="input-container">
+            <div class="input-wrapper">
+                <textarea id="user-input" placeholder="请输入您的问题..." rows="3"></textarea>
+                <button id="send-button" class="send-button">
+                    <span class="send-text">发送</span>
+                    <span class="send-icon">📤</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <div id="status-indicator" class="status-indicator">
+                <span class="status-text">就绪</span>
+            </div>
+            <div class="pending-count" id="pending-count" style="display: none;">
+                待处理干预: <span id="pending-number">0</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <!-- Markdown 渲染库 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- 代码高亮库 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    
+    <script src="script.js"></script>
+</body>
+</html>

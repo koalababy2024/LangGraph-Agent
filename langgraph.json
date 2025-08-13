@@ -2,7 +2,8 @@
   "dependencies": ["."],
   "graphs": {
     "agent": "./graphs/chat_graph.py:graph",
-    "tool": "./graphs/tool_graph.py:graph"
+    "tool": "./graphs/tool_graph.py:graph",
+    "human_loop": "./graphs/human_loop_graph.py:graph"
   },
   "env": ".env",
   "image_distro": "wolfi"

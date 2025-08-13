@@ -19,6 +19,7 @@ load_dotenv()  # ensure .env variables available before other imports
 
 from api.chat_routes import router as chat_router
 from api.tool_routes import router as tool_router
+from api.human_loop_routes import router as human_loop_router
 import uvicorn
 
 from fastapi.staticfiles import StaticFiles
@@ -31,6 +32,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Include routers
 app.include_router(chat_router)
 app.include_router(tool_router)
+app.include_router(human_loop_router)
 
 # 设置日志级别
 logging.getLogger("httpx").setLevel(logging.WARNING)
