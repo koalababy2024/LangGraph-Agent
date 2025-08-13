@@ -102,4 +102,4 @@ graph_builder.add_edge(START, "chatbot")
 
 # 编译图（带内存）
 memory = InMemorySaver()
-graph = graph_builder.compile()
+graph = graph_builder.compile(checkpointer=memory)

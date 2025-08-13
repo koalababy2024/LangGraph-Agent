@@ -324,6 +324,8 @@ async def stream_chat_with_human_loop(message: str, thread_id: str = "default"):
                         'final_node': current_node
                     }
                 }
+                # 一次对话所有trunk输出后执行，可以输出token总数等等信息给前端展示
+                logger.info(f"[stream_chat] 发送结束事件: {end_data}")
                 yield f"data: {json.dumps(end_data)}\n\n"
             except GraphInterrupt as e:
                 # HITL: 捕获人工干预中断并通知前端
@@ -438,6 +440,7 @@ async def stream_respond_with_human_input(response: str, thread_id: str):
                                         await asyncio.sleep(0.01)
 
             end_data = {'type':'end','content':'','metadata':{'total_chunks':chunk_count,'total_length':len(accumulated_content),'final_node':current_node}}
+            logger.info(f"[respond_stream] 流式恢复完成: {str(end_data)}")
             yield f"data: {json.dumps(end_data)}\n\n"
 
         except Exception as e:

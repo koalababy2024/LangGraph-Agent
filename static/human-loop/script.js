@@ -4,6 +4,9 @@ class HumanLoopApp {
         this.isProcessing = false;
         this.currentEventSource = null;
         this.currentAssistantMessage = null;
+        this.isWaitingForHumanInput = false;
+        this.currentInterventionQuery = null;
+        this.aiResponseContainer = null; // 用于在工具执行后分段展示AI最终回复
         
         this.initializeElements();
         this.attachEventListeners();
@@ -11,6 +14,56 @@ class HumanLoopApp {
         this.initMarkdown();
     }
     
+    addAIDecisionInfo(messageElement, data) {
+        const contentDiv = messageElement.querySelector('.content');
+        if (!contentDiv) return;
+        if (contentDiv.innerHTML.includes('正在思考...')) {
+            contentDiv.innerHTML = '';
+        }
+        const decisionDiv = document.createElement('div');
+        decisionDiv.className = 'ai-decision-info';
+        decisionDiv.innerHTML = `
+            <div class="decision-header">${data.content || '🤖 AI决定调用工具'}</div>
+        `;
+        contentDiv.appendChild(decisionDiv);
+    }
+
+    addToolCallInfo(messageElement, toolData) {
+        const contentDiv = messageElement.querySelector('.content');
+        if (!contentDiv) return;
+        const toolCallDiv = document.createElement('div');
+        toolCallDiv.className = 'tool-call-info';
+        const toolName = toolData.tool_name || toolData.name || 'unknown';
+        const args = JSON.stringify(toolData.tool_args || toolData.args || {}, null, 2);
+        toolCallDiv.innerHTML = `
+            <div class="tool-header">🔍 调用工具: <strong>${toolName}</strong></div>
+            <pre><code>${args}</code></pre>
+        `;
+        contentDiv.appendChild(toolCallDiv);
+    }
+
+    addToolResultInfo(messageElement, toolData) {
+        const contentDiv = messageElement.querySelector('.content');
+        if (!contentDiv) return;
+        const toolResultDiv = document.createElement('div');
+        toolResultDiv.className = 'tool-result-info';
+        toolResultDiv.innerHTML = `
+            <div class="tool-result-header">✅ 工具执行完成</div>
+            <div class="tool-result-content">${toolData.result || ''}</div>
+        `;
+        contentDiv.appendChild(toolResultDiv);
+        // 工具结果后准备 AI 回复区域
+        const aiResponseSection = document.createElement('div');
+        aiResponseSection.className = 'ai-response-section';
+        aiResponseSection.innerHTML = `
+            <div class="ai-response-header">🤖 AI回复:</div>
+            <div class="ai-response-content"></div>
+        `;
+        contentDiv.appendChild(aiResponseSection);
+        this.aiResponseContainer = aiResponseSection.querySelector('.ai-response-content');
+        this.currentContent = '';
+    }
+
     initMarkdown() {
         if (typeof marked !== 'undefined') {
             marked.setOptions({
@@ -35,13 +88,6 @@ class HumanLoopApp {
         this.resetButton = document.getElementById('reset-button');
         this.statusIndicator = document.getElementById('status-indicator');
         this.notification = document.getElementById('notification');
-        
-        // 干预面板元素
-        this.interventionPanel = document.getElementById('intervention-panel');
-        this.interventionQuery = document.getElementById('intervention-query');
-        this.humanResponse = document.getElementById('human-response');
-        this.submitResponse = document.getElementById('submit-response');
-        this.cancelIntervention = document.getElementById('cancel-intervention');
     }
     
     attachEventListeners() {
@@ -54,11 +100,6 @@ class HumanLoopApp {
         });
         
         this.resetButton.addEventListener('click', () => this.resetConversation());
-        this.submitResponse.addEventListener('click', () => this.submitHumanResponse());
-        this.cancelIntervention.addEventListener('click', () => this.cancelInterventionPanel());
-        
-        // 自动调整输入框高度
-        this.userInput.addEventListener('input', () => this.adjustTextareaHeight());
     }
     
     initThreadId() {
@@ -83,7 +124,9 @@ class HumanLoopApp {
         const messages = this.chatMessages.querySelectorAll('.message:not(.welcome-message)');
         messages.forEach(msg => msg.remove());
         
-        this.hideInterventionPanel();
+        // 重置人工介入状态
+        this.resetInterventionState();
+        
         this.updateStatus('ready', '就绪');
         this.showNotification('已开始新对话');
     }
@@ -96,6 +139,12 @@ class HumanLoopApp {
     async sendMessage() {
         const message = this.userInput.value.trim();
         if (!message || this.isProcessing) return;
+        
+        // 如果正在等待人工输入，则处理人工回复
+        if (this.isWaitingForHumanInput) {
+            await this.submitHumanResponse(message);
+            return;
+        }
         
         this.isProcessing = true;
         this.updateStatus('thinking', '思考中...');
@@ -121,6 +170,7 @@ class HumanLoopApp {
         // 清理状态
         this.currentAssistantMessage = null;
         this.currentContent = '';
+        this.aiResponseContainer = null;
         
         // 使用EventSource进行流式连接
         const encodedMessage = encodeURIComponent(message);
@@ -150,10 +200,43 @@ class HumanLoopApp {
                         
                     case 'content':
                         ensureAssistantMessage();
+                        // 若之前展示了工具调用信息，则在单独的 AI 回复区域中渲染
+                        let targetContainer = this.aiResponseContainer;
+                        if (!targetContainer) {
+                            const hasToolInfo = contentDiv.querySelector('.ai-decision-info, .tool-call-info, .tool-result-info');
+                            if (hasToolInfo) {
+                                const aiResponseSection = document.createElement('div');
+                                aiResponseSection.className = 'ai-response-section';
+                                aiResponseSection.innerHTML = `
+                                    <div class="ai-response-header">🤖 AI回复:</div>
+                                    <div class="ai-response-content"></div>
+                                `;
+                                contentDiv.appendChild(aiResponseSection);
+                                targetContainer = aiResponseSection.querySelector('.ai-response-content');
+                                this.aiResponseContainer = targetContainer;
+                            } else {
+                                targetContainer = contentDiv;
+                            }
+                        }
                         this.currentContent += data.content;
-                        this.renderMarkdownContent(contentDiv, this.currentContent);
+                        this.renderMarkdownContent(targetContainer, this.currentContent);
                         break;
                         
+                    case 'ai_decision':
+                        ensureAssistantMessage();
+                        this.addAIDecisionInfo(this.currentAssistantMessage, data);
+                        break;
+
+                    case 'tool_call':
+                        ensureAssistantMessage();
+                        this.addToolCallInfo(this.currentAssistantMessage, data);
+                        break;
+
+                    case 'tool_result':
+                        ensureAssistantMessage();
+                        this.addToolResultInfo(this.currentAssistantMessage, data);
+                        break;
+
                     case 'end':
                         this.currentEventSource.close();
                         this.updateStatus('ready', '就绪');
@@ -163,7 +246,7 @@ class HumanLoopApp {
                         
                     case 'intervention_required':
                         this.currentEventSource.close();
-                        this.showInterventionPanel(data.query);
+                        this.showInterventionInChat(data.query);
                         this.updateStatus('intervention', '等待人工协助...');
                         this.isProcessing = false;
                         this.sendButton.disabled = false;
@@ -228,7 +311,7 @@ class HumanLoopApp {
                 break;
                 
             case 'intervention_required':
-                this.showInterventionPanel(data.query);
+                this.showInterventionInChat(data.query);
                 this.updateStatus('intervention', '等待人工协助...');
                 this.isProcessing = false;
                 this.sendButton.disabled = false;
@@ -262,44 +345,78 @@ class HumanLoopApp {
         return messageDiv;
     }
     
-    showInterventionPanel(query) {
-        this.interventionQuery.textContent = query;
-        this.interventionPanel.style.display = 'flex';
-        this.humanResponse.focus();
+    showInterventionInChat(query) {
+        this.currentInterventionQuery = query;
+        this.isWaitingForHumanInput = true;
         
-        // 显示干预提示消息
-        this.addMessage('assistant', `🤝 我需要人工专家的协助来回答这个问题：\n\n"${query}"\n\n请等待专家提供专业建议...`);
+        // 清除之前的"正在思考..."消息
+        if (this.currentAssistantMessage) {
+            this.currentAssistantMessage.remove();
+            this.currentAssistantMessage = null;
+        }
+        
+        // 在聊天列表中显示人工介入提示
+        const interventionMessage = this.addInterventionMessage(query);
+        
+        // 修改输入框提示
+        this.userInput.placeholder = '请输入您的专业建议或回复...';
+        this.userInput.focus();
+        
+        // 修改发送按钮文本
+        const sendText = this.sendButton.querySelector('.send-text');
+        if (sendText) {
+            sendText.textContent = '提交回复';
+        }
     }
     
-    hideInterventionPanel() {
-        this.interventionPanel.style.display = 'none';
-        this.humanResponse.value = '';
+    addInterventionMessage(query) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message assistant intervention-message';
+        
+        const content = `🤝 **需要人工专家协助**\n\n**问题：** ${query}\n\n💡 请在下方输入框中提供您的专业建议或回复，然后点击"提交回复"按钮。`;
+        
+        messageDiv.innerHTML = `
+            <div class="message-content">
+                <div class="avatar">🤖</div>
+                <div class="content">${typeof marked !== 'undefined' ? marked.parse(content) : content}</div>
+            </div>
+        `;
+        
+        this.chatMessages.appendChild(messageDiv);
+        this.scrollToBottom();
+        return messageDiv;
     }
     
-    cancelInterventionPanel() {
-        this.hideInterventionPanel();
-        this.updateStatus('ready', '就绪');
-        this.addMessage('assistant', '已取消人工协助请求。');
-    }
-    
-    async submitHumanResponse() {
-        const response = this.humanResponse.value.trim();
+    async submitHumanResponse(response) {
         if (!response) {
-            alert('请输入回复内容');
+            this.showNotification('请输入回复内容', 'error');
             return;
         }
 
-        this.updateStatus('processing', '处理人工回复中...');
+        // 显示专家回复消息
+        this.addMessage('user', `💼 **专家回复：** ${response}`);
+
+        // 清空输入框并调整高度
+        this.userInput.value = '';
+        this.adjustTextareaHeight();
+        
+        // 重置界面状态
+        this.resetInterventionState();
+        
+        this.updateStatus('processing', '处理专家回复中...');
+        this.isProcessing = true;
+        this.sendButton.disabled = true;
 
         // 采用 SSE 流式恢复，实时展示最终回复
         try {
             const url = `/human-loop/respond/stream?thread_id=${encodeURIComponent(this.threadId)}&response=${encodeURIComponent(response)}`;
             const es = new EventSource(url);
 
-            // 在界面上加入“专家回复”占位并流式渲染
+            // 在界面上加入AI回复占位并流式渲染
             let assistantMsg = this.addMessage('assistant', '');
             const contentDiv = assistantMsg.querySelector('.content');
-            let contentBuf = '💡 专家回复：\n\n';
+            let contentBuf = '';
+            this.aiResponseContainer = null;
             this.renderMarkdownContent(contentDiv, contentBuf);
 
             es.onmessage = (event) => {
@@ -312,26 +429,47 @@ class HumanLoopApp {
                             // 已创建占位，不需要额外处理
                             break;
                         case 'content':
+                            // 若之前展示了工具调用信息，则在单独的 AI 回复区域中渲染
+                            let targetContainer = this.aiResponseContainer;
+                            if (!targetContainer) {
+                                const hasToolInfo = contentDiv.querySelector('.ai-decision-info, .tool-call-info, .tool-result-info');
+                                if (hasToolInfo) {
+                                    const aiResponseSection = document.createElement('div');
+                                    aiResponseSection.className = 'ai-response-section';
+                                    aiResponseSection.innerHTML = `
+                                        <div class="ai-response-header">🤖 AI回复:</div>
+                                        <div class="ai-response-content"></div>
+                                    `;
+                                    contentDiv.appendChild(aiResponseSection);
+                                    targetContainer = aiResponseSection.querySelector('.ai-response-content');
+                                    this.aiResponseContainer = targetContainer;
+                                } else {
+                                    targetContainer = contentDiv;
+                                }
+                            }
                             contentBuf += data.content;
-                            this.renderMarkdownContent(contentDiv, contentBuf);
+                            this.renderMarkdownContent(targetContainer, contentBuf);
                             break;
                         case 'ai_decision':
+                            this.addAIDecisionInfo(assistantMsg, data);
+                            break;
                         case 'tool_call':
-                            // 可选：显示状态提示，不插入到正文
+                            this.addToolCallInfo(assistantMsg, data);
                             break;
                         case 'tool_result':
-                            // 可选：可以在通知区域展示
+                            this.addToolResultInfo(assistantMsg, data);
                             break;
                         case 'intervention_required':
                             es.close();
                             // 再次需要人工协助
-                            this.showInterventionPanel(data.query || '需要人工协助');
+                            this.showInterventionInChat(data.query || '需要人工协助');
                             this.updateStatus('intervention', '等待人工协助...');
                             break;
                         case 'end':
                             es.close();
-                            this.hideInterventionPanel();
                             this.updateStatus('ready', '就绪');
+                            this.isProcessing = false;
+                            this.sendButton.disabled = false;
                             this.showNotification('人工协助完成');
                             break;
                         case 'error':
@@ -353,8 +491,24 @@ class HumanLoopApp {
             };
         } catch (error) {
             console.error('提交人工回复失败:', error);
-            alert('提交失败：' + error.message);
+            this.showNotification('提交失败：' + error.message, 'error');
             this.updateStatus('error', '错误');
+            this.isProcessing = false;
+            this.sendButton.disabled = false;
+        }
+    }
+    
+    resetInterventionState() {
+        this.isWaitingForHumanInput = false;
+        this.currentInterventionQuery = null;
+        
+        // 重置输入框提示
+        this.userInput.placeholder = '请输入您的问题...';
+        
+        // 重置发送按钮文本
+        const sendText = this.sendButton.querySelector('.send-text');
+        if (sendText) {
+            sendText.textContent = '发送';
         }
     }
     
