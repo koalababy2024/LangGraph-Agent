@@ -4,6 +4,7 @@ import warnings
 
 import os
 from typing import Annotated
+import logging
 
 from langchain_core.tools import tool
 from langchain_core.messages import BaseMessage
@@ -105,15 +106,22 @@ def chatbot(state: State):
     LangGraph will automatically handle streaming when using stream_mode="messages".
     The framework will intercept and stream tokens from llm_with_tools.invoke() calls.
     """
-    import logging
     logger = logging.getLogger(__name__)
+    logger.info("[tool_graph][chatbot][enter] 进入 chatbot 节点，准备调用 llm_with_tools.invoke()")
     
     response = llm_with_tools.invoke(state["messages"])
-    logger.info(f"LLM with tools invoke Response: {response.content}")
+    # 明确标注这是来自 tool_graph 的 AIMessage 完整返回
+    content_len = len(response.content) if hasattr(response, 'content') else 0
+    logger.info(f"[tool_graph][chatbot][AIMessage] invoke 完成，content_len={content_len}")
     
     # Log tool calls if present
     if hasattr(response, 'tool_calls') and response.tool_calls:
-        logger.info(f"Tool calls requested: {[tc.get('name', 'unknown') for tc in response.tool_calls]}")
+        names = [tc.get('name', 'unknown') for tc in response.tool_calls]
+        logger.info(f"[tool_graph][chatbot][AIMessage] 检测到工具调用请求: {names}")
+        for i, tc in enumerate(response.tool_calls):
+            logger.info(f"[tool_graph][chatbot][AIMessage]  tool_call[{i}] name={tc.get('name','unknown')} args={tc.get('args',{})}")
+    else:
+        logger.info("[tool_graph][chatbot][AIMessage] 未请求工具调用（普通回答或继续生成）")
     
     return {"messages": [response]}
 

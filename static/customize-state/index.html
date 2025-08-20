@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customize State 助手</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🧩 Customize State 助手</h1>
+            <p class="subtitle">支持自定义状态与人工干预的智能助手</p>
+        </header>
+
+        <div class="chat-controls">
+            <div class="thread-info">
+                <span>会话ID: </span>
+                <span id="thread-id" class="thread-id-display">default</span>
+            </div>
+            <button id="reset-button" class="reset-button">新对话</button>
+        </div>
+
+        <div class="chat-container">
+            <div id="chat-messages" class="chat-messages">
+                <div class="welcome-message">
+                    <div class="message-content">
+                        <h3>👋 欢迎使用 Customize State 助手！</h3>
+                        <p>这个助手具有以下特性：</p>
+                        <ul>
+                            <li>🤖 AI会基于自定义状态进行对话</li>
+                            <li>🔍 需要时会调用联网搜索工具（百度搜索）</li>
+                            <li>🤝 遇到需要确认或补充信息时将请求人工干预</li>
+                        </ul>
+                        <p>开始你的对话吧！</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 人工干预面板 -->
+        <div id="intervention-panel" class="intervention-panel" style="display:none;">
+            <div class="panel-content" style="background:#fff; border-radius:12px; padding:20px; width:520px; max-width:95%; box-shadow:0 10px 30px rgba(0,0,0,0.3);">
+                <h3 style="margin-bottom:10px;">🤝 需要人工确认</h3>
+                <p id="intervention-question" style="color:#555; margin-bottom:16px;">Is this correct?</p>
+                <div class="form-row" style="display:flex; gap:12px; margin-bottom:10px;">
+                    <div style="flex:1;">
+                        <label for="intervention-name" style="display:block; font-size:0.9rem; color:#555; margin-bottom:6px;">姓名 (name)</label>
+                        <input id="intervention-name" type="text" placeholder="如：LangGraph" style="width:100%; padding:10px; border:1px solid #e9ecef; border-radius:8px;" />
+                    </div>
+                    <div style="flex:1;">
+                        <label for="intervention-birthday" style="display:block; font-size:0.9rem; color:#555; margin-bottom:6px;">生日 (birthday)</label>
+                        <input id="intervention-birthday" type="text" placeholder="如：2024-01-17 或 Jan 17, 2024" style="width:100%; padding:10px; border:1px solid #e9ecef; border-radius:8px;" />
+                    </div>
+                </div>
+                <div class="form-row" style="margin:8px 0 14px;">
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer; user-select:none;">
+                        <input id="intervention-correct" type="checkbox" />
+                        <span>以上信息正确（勾选后将直接确认 correct=y，不再提交修改）</span>
+                    </label>
+                </div>
+                <div style="display:flex; justify-content:flex-end; gap:10px;">
+                    <button id="intervention-cancel" class="reset-button" style="background:#6c757d;">取消</button>
+                    <button id="intervention-submit" class="reset-button" style="background:#28a745;">提交</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="input-container">
+            <div class="input-wrapper">
+                <textarea id="user-input" placeholder="请输入您的问题..." rows="3"></textarea>
+                <button id="send-button" class="send-button">
+                    <span class="send-text">发送</span>
+                    <span class="send-icon">📤</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="status-bar">
+            <div id="status-indicator" class="status-indicator">
+                <span class="status-text">就绪</span>
+            </div>
+            <div class="pending-count" id="pending-count" style="display: none;">
+                待处理干预: <span id="pending-number">0</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <!-- Markdown 渲染库 -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- 代码高亮库 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -6,7 +6,7 @@ import asyncio
 import contextlib
 from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
 from graphs.tool_graph import graph as tool_graph
 
@@ -91,7 +91,7 @@ async def tool_stream_endpoint(
     
     async def generate_tool_stream():
         try:
-            logger.info(f"开始工具流式请求: {message[:50]}...")
+            logger.info(f"[tool_routes][start] 开始工具流式请求: {message[:50]}...")
             
             # Send start signal
             start_data = {
@@ -105,10 +105,10 @@ async def tool_stream_endpoint(
             initial_state = {
                 "messages": [HumanMessage(content=message)]
             }
-            logger.info(f"创建初始状态，消息数量: {len(initial_state['messages'])}")
+            logger.info(f"[tool_routes][init] 创建初始状态，消息数量: {len(initial_state['messages'])}")
             
             # Use LangGraph's official streaming with multiple modes
-            logger.info("使用 LangGraph 官方多模式流式输出")
+            logger.info("[tool_routes][stream] 使用 LangGraph 官方多模式流式输出: stream_mode=['messages','updates']")
             
             accumulated_content = ""
             chunk_count = 0
@@ -157,14 +157,19 @@ async def tool_stream_endpoint(
                     # Handle LLM token streaming
                     message_chunk, metadata = chunk
                     node_from_metadata = metadata.get('langgraph_node', 'unknown')
+                    # 统一的 messages 分支日志前缀
+                    prefix = f"[tool_routes][messages][node={node_from_metadata}]"
+                    logger.info(
+                        f"{prefix} chunk 到达: content='{getattr(message_chunk, 'content', '')}', has_tool_calls={hasattr(message_chunk, 'tool_calls')}")
+
                     # 如果来自 ToolNode（tools 节点）的消息，则跳过，避免将工具返回值显示为 AI 回复
                     if node_from_metadata == "tools":
-                        # 这是工具调用返回的ToolMessage，这里不返回给前端显示。
-                        # 这里和下面工具节点更新update的逻辑是同时发生的。
-                        logger.info(f"获取了LLM消息 - 调用工具返回: {message_chunk.content}")
+                        # 这是工具节点的 token 流（通常代表 ToolMessage 相关输出片段，工具tool node执行后的返回值），跳过显示，仅记录日志。
+                        logger.info(f"{prefix}[ToolMessageChunk][skip] 工具节点 chunk 已跳过，content='{getattr(message_chunk, 'content', '')}'")
                         continue
                     if hasattr(message_chunk, 'content') and message_chunk.content:
-                        logger.info(f"获取了LLM消息: {message_chunk.content}")
+                        # 对于 chatbot 节点，这些 chunk 属于 AIMessage 的 token 级输出
+                        logger.info(f"{prefix}[AIMessageChunk] token='{message_chunk.content}'")
                         chunk_count += 1
                         accumulated_content += message_chunk.content
                         
@@ -185,16 +190,20 @@ async def tool_stream_endpoint(
                     # Handle node state updates
                     for node_name, node_output in chunk.items():
                         current_node = node_name
-                        logger.info(f"节点更新 - {node_name}: {str(node_output)}")
+                        prefix = f"[tool_routes][updates][node={node_name}]"
+                        logger.info(f"{prefix} 节点状态更新到达")
                         
                         if node_name == "tools":
                             # Tool node execution
-                            logger.info(f"🔧 工具节点正在执行...")
+                            logger.info(f"{prefix}[ToolNode] 🔧 工具节点正在执行...")
                             if "messages" in node_output and node_output["messages"]:
-                                # ToolMessage
+                                # ToolMessage（完整对象）
                                 tool_message = node_output["messages"][-1]
+                                if isinstance(tool_message, ToolMessage):
+                                    logger.info(f"{prefix}[ToolMessage] ✅ 工具执行完成，content_len={len(tool_message.content) if hasattr(tool_message, 'content') else 0}")
+                                else:
+                                    logger.info(f"{prefix}[ToolMessage?] ✅ 工具执行完成，类型={type(tool_message)}")
                                 if hasattr(tool_message, 'content'):
-                                    logger.info(f"✅ 工具执行完成: {tool_message.content}")
                                     tool_data = {
                                         'type': 'tool_result',
                                         'content': f"🔧 工具执行完成",
@@ -206,12 +215,23 @@ async def tool_stream_endpoint(
                         elif node_name == "chatbot":
                             # Chatbot node - check for tool calls
                             if "messages" in node_output and node_output["messages"]:
-                                # AIMessage
+                                # AIMessage（完整对象）
                                 ai_message = node_output["messages"][-1]
+
+                                # 详细记录 AIMessage 信息
+                                if isinstance(ai_message, AIMessage):
+                                    logger.info(f"{prefix}[AIMessage] 🤖 Chatbot节点返回AIMessage，content_len={len(ai_message.content) if hasattr(ai_message, 'content') else 0}")
+                                else:
+                                    logger.info(f"{prefix}[AIMessage?] 🤖 Chatbot节点返回消息，但类型={type(ai_message)}")
+                                logger.info(f"{prefix}[AIMessage] has_tool_calls={hasattr(ai_message, 'tool_calls') and bool(ai_message.tool_calls)}")
+                                if hasattr(ai_message, 'tool_calls') and ai_message.tool_calls:
+                                    logger.info(f"{prefix}[AIMessage] tool_calls={[tc.get('name', 'unknown') for tc in ai_message.tool_calls]}")
+                                    for i, tc in enumerate(ai_message.tool_calls):
+                                        logger.info(f"{prefix}[AIMessage]   [{i}] name={tc.get('name', 'unknown')} args={tc.get('args', {})}")
                                 
                                 # Check if the message has tool calls and not already sent
                                 if hasattr(ai_message, 'tool_calls') and ai_message.tool_calls and not tool_decision_sent:
-                                    logger.info(f"🔍 AI决定调用工具: {[tc.get('name', 'unknown') for tc in ai_message.tool_calls]}")
+                                    logger.info(f"{prefix}[AIMessage] 🔍 AI决定调用工具: {[tc.get('name', 'unknown') for tc in ai_message.tool_calls]}")
                                     
                                     # 标记已发送，避免重复
                                     tool_decision_sent = True
@@ -222,7 +242,7 @@ async def tool_stream_endpoint(
                                         'content': '🤖 AI决定调用工具',
                                         'metadata': {'node': node_name}
                                     }
-                                    logger.info(f"📤 发送AI决策事件: {decision_data}")
+                                    logger.info(f"{prefix}[AIMessage] 📤 发送AI决策事件: {decision_data}")
                                     yield f"data: {json.dumps(decision_data)}\n\n"
                                     
                                     # 稍微延迟以确保事件顺序
@@ -238,7 +258,7 @@ async def tool_stream_endpoint(
                                             'tool_args': tool_call.get('args', {}),
                                             'metadata': {'node': node_name}
                                         }
-                                        logger.info(f"📤 发送工具调用事件: {tool_call_data}")
+                                        logger.info(f"{prefix}[AIMessage] 📤 发送工具调用事件: {tool_call_data}")
                                         yield f"data: {json.dumps(tool_call_data)}\n\n"
                                         await asyncio.sleep(0.01)  # 小延迟确保事件顺序
 
@@ -254,7 +274,7 @@ async def tool_stream_endpoint(
                 }
             }
             yield f"data: {json.dumps(end_data)}\n\n"
-            logger.info(f"工具流式输出完成，总共 {chunk_count} 个 token，总长度: {len(accumulated_content)} 字符")
+            logger.info(f"[tool_routes][end] 工具流式输出完成，总共 {chunk_count} 个 token，总长度: {len(accumulated_content)} 字符")
             
         except Exception as e:
             # Send error signal
@@ -265,7 +285,7 @@ async def tool_stream_endpoint(
                 'metadata': {'node': 'system', 'error': True}
             }
             yield f"data: {json.dumps(error_data)}\n\n"
-            logger.error(f"工具流式输出出错: {str(e)}", exc_info=True)
+            logger.error(f"[tool_routes][error] 工具流式输出出错: {str(e)}", exc_info=True)
     
     return StreamingResponse(
         generate_tool_stream(),
@@ -276,31 +296,3 @@ async def tool_stream_endpoint(
             "Content-Type": "text/event-stream"
         }
     )
-
-
-@router.get("/test")
-async def test_tool_endpoint():
-    """Test endpoint to verify tool functionality"""
-    try:
-        test_message = "什么是Python编程语言？"
-        
-        initial_state = {
-            "messages": [HumanMessage(content=test_message)]
-        }
-        
-        logger.info(f"Invoking tool graph for test message: '{test_message}'")
-        result = await tool_graph.ainvoke(initial_state)
-        logger.info(f"Graph invocation for test finished. Final state: {{result}}")
-        
-        return {
-            "success": True,
-            "test_message": test_message,
-            "response_count": len(result["messages"]),
-            "final_response": result["messages"][-1].content if result["messages"] else "No response"
-        }
-        
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
